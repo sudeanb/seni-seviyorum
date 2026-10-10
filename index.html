@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Her dilde seni seviyorum</title>
+  <style>
+    :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #050304; color: #ffe8ee; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100svh; display: grid; grid-template-rows: auto 1fr auto; }
+    header { text-align: center; padding: 30px 16px 0; }
+    h1 { margin: 0; font-size: 11px; font-weight: 500; letter-spacing: .3em; color: #b88995; }
+    main { min-height: 0; display: grid; place-items: center; padding: 8px 18px; }
+    .stage { position: relative; width: min(100%, 940px, calc((100svh - 220px) * 1.16)); }
+    canvas { display: block; width: 100%; aspect-ratio: 1.16; }
+    footer { text-align: center; padding: 0 16px 24px; }
+    .phrase { height: 38px; font-size: clamp(20px, 3vw, 28px); font-weight: 500; color: #ffcbd8; }
+    .language { height: 25px; font-size: 11px; letter-spacing: .14em; color: #ab7a88; }
+    .controls { display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 15px; }
+    button, select { font: inherit; font-size: 12px; color: #d9a8b6; border: 1px solid #42242e; background: #12090d; border-radius: 30px; min-height: 38px; padding: 9px 17px; cursor: pointer; }
+    button:hover, select:hover { background: #231018; border-color: #824256; }
+    button:focus-visible, select:focus-visible { outline: 2px solid #ff8aae; outline-offset: 4px; }
+    select { padding-right: 24px; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+    @media (max-width: 540px) { header { padding-top: 24px; } main { padding: 0 12px; } .stage { width: min(100%, calc((100svh - 220px) * .95)); } canvas { aspect-ratio: .95; } footer { padding-bottom: 30px; } }
+    @media (max-height: 700px) and (min-width: 541px) { header { padding-top: 16px; } .stage { width: min(100%, 630px, calc((100svh - 185px) * 1.16)); } footer { padding-bottom: 12px; } .controls { margin-top: 5px; } }
+  </style>
+</head>
+<body>
+  <header><h1>20 DİL · TEK BİR DUYGU</h1></header>
+  <main>
+    <div class="stage"><canvas id="heart" role="img" aria-label="20 dilde seni seviyorum yazılarından oluşan kalp. Yazılar farklı yerlerde rastgele parlıyor.">Seni seviyorum · I love you · Je t’aime · Ti amo · Te amo · Ich liebe dich</canvas></div>
+  </main>
+  <footer>
+    <div id="phrase" class="phrase" aria-hidden="true">Seni seviyorum</div>
+    <div id="language" class="language" aria-hidden="true">TÜRKÇE</div>
+    <div class="controls">
+      <button id="toggle" type="button" aria-pressed="false">Duraklat</button>
+      <label class="sr-only" for="speed">Parlama hızı</label>
+      <select id="speed" aria-label="Parlama hızı"><option value="520">Yavaş</option><option value="260" selected>Normal</option><option value="120">Hızlı</option></select>
+      <button id="fullscreen" type="button">Tam ekran</button>
+    </div>
+    <p class="sr-only">Kalpte Türkçe, İngilizce, Fransızca, İtalyanca, İspanyolca, Almanca, Portekizce, Hollandaca, İsveççe, Lehçe, Rusça, Ukraynaca, Yunanca, Japonca, Korece, Mandarin Çincesi, Arapça, Hintçe, Vietnamca ve Endonezce sevgi ifadeleri bulunur.</p>
+  </footer>
+  <script>
+  (() => {
+    'use strict';
+    // Tek dosya; internet, kurulum veya harici kütüphane gerektirmez.
+    const phrases = [
+      ['Seni seviyorum', 'Türkçe', 'tr'], ['I love you', 'İngilizce', 'en'],
+      ['Je t’aime', 'Fransızca', 'fr'], ['Ti amo', 'İtalyanca', 'it'],
+      ['Te amo', 'İspanyolca', 'es'], ['Ich liebe dich', 'Almanca', 'de'],
+      ['Eu te amo', 'Portekizce', 'pt'], ['Ik hou van jou', 'Hollandaca', 'nl'],
+      ['Jag älskar dig', 'İsveççe', 'sv'], ['Kocham cię', 'Lehçe', 'pl'],
+      ['Я тебя люблю', 'Rusça', 'ru'], ['Я тебе кохаю', 'Ukraynaca', 'uk'],
+      ['Σ’ αγαπώ', 'Yunanca', 'el'], ['愛してる', 'Japonca', 'ja'],
+      ['사랑해', 'Korece', 'ko'], ['我爱你', 'Mandarin Çincesi', 'zh'],
+      ['أحبك', 'Arapça', 'ar'], ['मैं तुमसे प्यार करता हूँ', 'Hintçe', 'hi'],
+      ['Anh yêu em', 'Vietnamca', 'vi'], ['Aku cinta kamu', 'Endonezce', 'id']
+    ];
+    const canvas = document.getElementById('heart');
+    const ctx = canvas.getContext('2d');
+    const phraseLabel = document.getElementById('phrase');
+    const languageLabel = document.getElementById('language');
+    const toggle = document.getElementById('toggle');
+    const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+    let words = [], width = 0, height = 0, active = 0, elapsed = 0, previous = 0;
+    let glowOrder = [], glowPosition = 0;
+    let paused = reduceMotion.matches, duration = 260;
+    const fontFamily = 'Arial, "Noto Sans", "Arial Unicode MS", sans-serif';
+    const font = size => `600 ${size}px ${fontFamily}`;
+
+    function shuffleGlowOrder() {
+      glowOrder = words.map((_, index) => index);
+      for (let i = glowOrder.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [glowOrder[i], glowOrder[j]] = [glowOrder[j], glowOrder[i]];
+      }
+      // Yeni tur başlarken az önce parlayan yazıyı tekrar seçme.
+      if (glowOrder.length > 1 && glowOrder[0] === active) {
+        [glowOrder[0], glowOrder[1]] = [glowOrder[1], glowOrder[0]];
+      }
+      glowPosition = 0;
+    }
+
+    function updateLabel() {
+      if (!words.length) return;
+      const p = phrases[words[active].phrase];
+      phraseLabel.textContent = p[0]; phraseLabel.lang = p[2];
+      languageLabel.textContent = p[1].toLocaleUpperCase('tr');
+    }
+    function syncButton() {
+      toggle.textContent = paused ? 'Devam et' : 'Duraklat';
+      toggle.setAttribute('aria-pressed', String(paused));
+    }
+
+    function layout() {
+      const bounds = canvas.getBoundingClientRect();
+      width = bounds.width; height = bounds.height;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // Parametrik kalbi yatay satırlarla kesip her aralığa tam sığan kelimeleri yerleştir.
+      const scale = Math.min((width - 28) / 32, (height - 32) / 30);
+      const centerX = width / 2, centerY = (height - 29 * scale) / 2 + 12 * scale;
+      const polygon = [];
+      for (let i = 0; i < 900; i++) {
+        const t = i / 900 * Math.PI * 2;
+        polygon.push([centerX + scale * 16 * Math.sin(t) ** 3,
+          centerY - scale * (13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t))]);
+      }
+      const small = width < 550;
+      const size = small ? Math.max(10, Math.min(13, width / 31)) : Math.max(14, Math.min(20, width / 44));
+      const lineHeight = size * 1.6, gap = small ? 7 : 10;
+      const top = Math.min(...polygon.map(p => p[1]));
+      const bottom = Math.max(...polygon.map(p => p[1]));
+      words = [];
+      let cursor = 0;
+      const counts = phrases.map(() => 0);
+      // Yirmi dil kalbin içinde sırayla tekrar eder.
+      for (let y = top + size * 1.3; y < bottom - size * .2; y += lineHeight) {
+        const intersections = [];
+        for (let i = 0; i < polygon.length; i++) {
+          const a = polygon[i], b = polygon[(i + 1) % polygon.length];
+          if ((a[1] <= y && b[1] > y) || (b[1] <= y && a[1] > y))
+            intersections.push(a[0] + (y - a[1]) / (b[1] - a[1]) * (b[0] - a[0]));
+        }
+        intersections.sort((a,b) => a-b);
+        for (let j = 0; j + 1 < intersections.length; j += 2) {
+          const left = intersections[j] + 3, right = intersections[j+1] - 3;
+          let used = 0, row = [];
+          while (right - left - used > size * 2) {
+            let chosen = -1, wordWidth = 0, chosenSize = size, leastUsed = Infinity;
+            // Uzun Hintçe ifade gerektiğinde hafif küçülür; harfler kesilmez.
+            for (let attempt = 0; attempt < phrases.length; attempt++) {
+              const index = (cursor + attempt) % phrases.length;
+              const candidateSize = index === 17 ? size * .86 : size;
+              ctx.font = font(candidateSize);
+              const measured = ctx.measureText(phrases[index][0]).width;
+              if (measured <= right - left - used && counts[index] < leastUsed) {
+                chosen = index; wordWidth = measured; chosenSize = candidateSize; leastUsed = counts[index];
+              }
+            }
+            if (chosen < 0) break;
+            row.push({ phrase: chosen, x: used + wordWidth/2, y, size: chosenSize, width: wordWidth });
+            counts[chosen]++;
+            used += wordWidth + gap; cursor = (chosen + 1) % phrases.length;
+          }
+          const offset = left + (right-left-Math.max(0, used-gap))/2;
+          row.forEach(word => { word.x += offset; words.push(word); });
+        }
+      }
+      shuffleGlowOrder();
+      active = glowOrder[0] ?? 0;
+      elapsed = 0;
+      updateLabel();
+      paint();
+    }
+
+    function paint() {
+      ctx.clearRect(0, 0, width, height);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      words.forEach((word, index) => {
+        ctx.font = font(word.size);
+        ctx.direction = phrases[word.phrase][2] === 'ar' ? 'rtl' : 'ltr';
+        if (index === active) return;
+        ctx.fillStyle = '#c84759'; ctx.shadowColor = '#ff3d69'; ctx.shadowBlur = 1.5;
+        ctx.fillText(phrases[word.phrase][0], word.x, word.y);
+      });
+      // Her yazı bir kez parlar; konumların sırası her turda rastgele karışır.
+      const word = words[active];
+      if (word) {
+        const strength = paused ? .7 : .7 + .3 * Math.sin(Math.PI * elapsed / duration);
+        ctx.font = font(word.size);
+        ctx.direction = phrases[word.phrase][2] === 'ar' ? 'rtl' : 'ltr';
+        ctx.fillStyle = '#fff0f5'; ctx.shadowColor = '#ff5685'; ctx.shadowBlur = 17 * strength;
+        ctx.fillText(phrases[word.phrase][0], word.x, word.y);
+        ctx.shadowBlur = 7 * strength;
+        ctx.fillText(phrases[word.phrase][0], word.x, word.y);
+      }
+      ctx.shadowBlur = 0;
+    }
+
+    function animate(now) {
+      const delta = previous ? Math.min(now-previous, 60) : 0;
+      previous = now;
+      if (!paused && !document.hidden && words.length) {
+        elapsed += delta;
+        while (elapsed >= duration) {
+          glowPosition++;
+          if (glowPosition >= glowOrder.length) shuffleGlowOrder();
+          active = glowOrder[glowPosition];
+          elapsed -= duration; updateLabel();
+        }
+        paint();
+      }
+      requestAnimationFrame(animate);
+    }
+    toggle.addEventListener('click', () => { paused = !paused; syncButton(); paint(); });
+    document.getElementById('speed').addEventListener('change', event => { duration = Number(event.target.value); elapsed = 0; });
+    document.getElementById('fullscreen').addEventListener('click', async () => {
+      try {
+        if (document.fullscreenElement) await document.exitFullscreen();
+        else await document.documentElement.requestFullscreen();
+      } catch { document.getElementById('fullscreen').textContent = 'Tam ekran kullanılamıyor'; }
+    });
+    document.addEventListener('fullscreenchange', () => {
+      document.getElementById('fullscreen').textContent = document.fullscreenElement ? 'Tam ekrandan çık' : 'Tam ekran';
+    });
+    document.addEventListener('visibilitychange', () => { previous = 0; });
+    reduceMotion.addEventListener('change', event => { paused = event.matches; syncButton(); paint(); });
+    new ResizeObserver(layout).observe(canvas);
+    syncButton(); layout();
+    document.fonts.ready.then(layout);
+    requestAnimationFrame(animate);
+  })();
+  </script>
+</body>
+</html>
